@@ -1,0 +1,73 @@
+-- Total Success Tasks
+select count(*) from task_instance
+WHERE {{date_filter}} and state= 'success'
+
+-- Total Failed Task
+select count(*) from task_instance
+WHERE {{date_filter}} and state= 'failed' and {{dag_name}}
+
+-- Total DAG
+select count(distinct(dag_id)) from task_instance
+
+-- Average DAG Runtime
+-- SELECT
+--     TO_CHAR(
+--         TO_TIMESTAMP(
+--             REGEXP_REPLACE(run_id, '^(scheduled__|manual__)', ''), 
+--             'YYYY-MM-DD"T"HH24:MI:SS'
+--         ), 
+--         'YYYY-MM-DD HH24:MI') as time_stamp,
+--         avg(duration)
+-- from task_instance
+-- where dag_id = 'ShopEZ_DAG'
+-- group by time_stamp
+
+SELECT
+    avg(duration)
+from task_instance
+WHERE {{date_filter}} and {{dag_name}}
+
+-- State Task Status filter
+select state, count(*) from task_instance
+WHERE {{date_filter}}
+group by state
+
+-- DAG Duration based on filter
+SELECT MAX(duration) AS "max_duration (s)", AVG(duration) AS avg_duration, task_id
+FROM task_instance
+where {{dag_name}} and {{date_filter}}
+GROUP BY task_id, dag_id
+order by "max_duration (s)" desc
+
+-- DAG runtime
+    select
+        TO_CHAR(
+            TO_TIMESTAMP(
+                REGEXP_REPLACE(run_id, '^(scheduled__|manual__)', ''), 
+                'YYYY-MM-DD"T"HH24:MI:SS'
+            ), 
+            'YYYY-MM-DD HH24:MI'
+        ) AS time_stamp,
+        sum(duration) as total_duration
+    from task_instance
+    where {{dag_name}}
+    group by time_stamp
+    order by time_stamp
+
+-- Crash frequency
+SELECT
+    subquery.time_stamp,
+    CASE WHEN SUM(subquery.total_failed) > 0 THEN 1 ELSE 0 END AS dag_failed
+FROM (
+    SELECT
+        TO_CHAR(
+            TO_TIMESTAMP(REGEXP_REPLACE(run_id, '^(scheduled__|manual__)', ''), 'YYYY-MM-DD"T"HH24:MI:SS'),
+            'YYYY-MM-DD'
+        ) AS time_stamp,
+        COUNT(CASE WHEN state != 'success' THEN 1 ELSE NULL END) AS total_failed
+    FROM task_instance
+    WHERE {{dag_id}} AND {{date_filter}}
+    GROUP BY time_stamp
+) AS subquery
+GROUP BY subquery.time_stamp
+ORDER BY subquery.time_stamp ASC;
